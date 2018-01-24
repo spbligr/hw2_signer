@@ -1,8 +1,6 @@
 package main
 
 import (
-	//"fmt"
-	//"fmt"
 	"fmt"
 )
 
@@ -18,21 +16,36 @@ func ExecutePipeline(freeFlowJobs... job)  {
 
 }
 
-var SingleHash = func(in, out chan interface{}) {
+var SingleHash = func(in, out chan interface{})  {
 	for value := range out {
-		data := fmt.Sprintf("SingleHash value = %v", value)
-		fmt.Println(data)
-		//result := DataSignerCrc32(data)+"~"+DataSignerCrc32(DataSignerMd5(data))
-		//fmt.Println("SingleHash result = ", result)
-		//in <- result
+
+		hashData := make(map[string]string)
+
+		data := fmt.Sprintf("%s", value)
+		result := DataSignerCrc32(hashData["data"]) + "~" + DataSignerCrc32(DataSignerMd5(hashData["data"]))
+
+		fmt.Println("SingleHash data= , resul = ", data, result)
+
+		in <- result
+		bufferCh <- data
+		fmt.Println("doshol ba ba ba")
 	}
 }
 
 var MultiHash = func(in, out chan interface{}) {
-	for value := range out {
-		data := fmt.Sprintf("MultiHash value = %v", value)
-		fmt.Println(data)
+	LOOP:
+	for {
+		select {
+		case singleHashResult := <- in :
+			fmt.Println("MultiHash singleHashResult =", singleHashResult)
+		case data := <-bufferCh :
+			fmt.Println("MultiHash data =", data)
+		default:
+			fmt.Println("MultiHash data =", "azino 777")
+			break LOOP
+		}
 	}
+
 }
 
 var CombineResults = func(in, out chan interface{}) {
