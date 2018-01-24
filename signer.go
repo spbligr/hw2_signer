@@ -23,27 +23,15 @@ var SingleHash = func(in, out chan interface{})  {
 
 		data := fmt.Sprintf("%s", value)
 		result := DataSignerCrc32(hashData["data"]) + "~" + DataSignerCrc32(DataSignerMd5(hashData["data"]))
-
 		fmt.Println("SingleHash data= , resul = ", data, result)
 
-		in <- result
-		bufferCh <- data
-		fmt.Println("doshol ba ba ba")
+		in <- result //сюда как-то передать data и result
 	}
 }
 
 var MultiHash = func(in, out chan interface{}) {
-	LOOP:
-	for {
-		select {
-		case singleHashResult := <- in :
-			fmt.Println("MultiHash singleHashResult =", singleHashResult)
-		case data := <-bufferCh :
-			fmt.Println("MultiHash data =", data)
-		default:
-			fmt.Println("MultiHash data =", "azino 777")
-			break LOOP
-		}
+	for value := range in {
+		fmt.Println("MultiHash", value)
 	}
 
 }
