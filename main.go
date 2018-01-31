@@ -1,41 +1,37 @@
 package main
 
 import (
-	"net"
 	"log"
-	"io"
-	"time"
+	//"fmt"
 )
+
+
 
 func main() {
 
-	listener, err := net.Listen("tcp", "localhost:8000")
+	// println("run as\n\ngo test -v -race")
+	inputData := []int{0, 1, 1, 2, 3, 5, 8}
+	testResult := "NOT_SET"
 
-	if err != nil {
-		log.Fatal(err)
+	hashSignJobs := []job{
+		job(func(in, out chan interface{}) {
+			for _, fibNum := range inputData {
+				out <- fibNum
+			}
+		}),
+		job(SingleHash),
+		job(MultiHash),
+		job(CombineResults),
+		job(func(in, out chan interface{}) {
+			dataRaw := <-in
+			data, ok := dataRaw.(string)
+			if !ok {
+				log.Fatal("cant convert result data to string")
+			}
+			testResult = data
+		}),
 	}
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		go handleConn(conn)
-	}
+	ExecutePipeline(hashSignJobs...)
 }
 
-func handleConn(c net.Conn)  {
-
-	defer c.Close()
-
-	for {
-		_, err := io.WriteString(c, time.Now().Format("15:04:05 \n"))
-		if err != nil {
-			return
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-}
