@@ -11,25 +11,29 @@ func ExecutePipeline(freeFlowJobs... job)  {
 
 	in := make(chan interface{})
 	out := make(chan interface{})
-	//wgOut := make(chan interface{})
-	//wgIn := make(chan int)
+	wgIn := make(chan struct{})
 
 
 	wg := &sync.WaitGroup{}
 
-	for _, job := range freeFlowJobs {
-
+	for index, job := range freeFlowJobs {
 		wg.Add(1)
-
 		go func(jobFunc func(in chan interface{}, out chan interface{}), in chan interface{}, out chan interface{}) {
 			go jobFunc(in, out)
 			select {
 			case <- in:
-				fmt.Println("wgDone")
-				wg.Done()
+				wgIn <- struct{}{}
+				if index == (len(freeFlowJobs) - 1) {
+					close(wgIn) //Кажется так не проканает. Попахивает говнокодом
+				}
 			}
 		}(job, in, out)
 
+	}
+
+	for wgItem := range wgIn{
+		fmt.Println("gwItem", wgItem)
+		wg.Done() //тут только не очень понятно когда выйти из цикла
 	}
 
 	wg.Wait()

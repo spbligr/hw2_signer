@@ -23,7 +23,7 @@ func main() {
 			}
 		}),
 		job(SingleHash),
-		job(MultiHash),
+		//job(MultiHash),
 		//job(CombineResults),
 		//job(func(in, out chan interface{}) {
 		//	dataRaw := <-in
