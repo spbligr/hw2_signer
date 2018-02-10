@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,12 +35,9 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 
 	wg := &sync.WaitGroup{}
 
-	tmp := make(chan string)
+	tmpOut := make(chan string)
 
 	for data := range in {
-
-		fmt.Printf(" in %v", data.(int))
-
 
 		wg.Add(1)
 
@@ -52,7 +48,7 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 
 		go func(wg *sync.WaitGroup, out chan string, d string, md5 string) {
 			hash := make(chan string)
-			hashMd5 := make(chan string) // make second because there is no guarante which will calculated first, so must take control of order.
+			hashMd5 := make(chan string)
 
 			go func(out chan string, input string) {
 				out <- DataSignerCrc32(input)
@@ -62,41 +58,50 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 				out <- DataSignerCrc32(input)
 			}(hashMd5, md5)
 
-			out <- fmt.Sprintf("%v~%v", <-hash, <-hashMd5)
+			result := fmt.Sprintf("%v~%v", <-hash, <-hashMd5)
+			out <- result
+
 			wg.Done()
-		}(wg, tmp, data, md5)
+
+		}(wg, tmpOut, data, md5)
 	}
 
 	go func(wg *sync.WaitGroup, c chan string) {
 		defer close(c)
 		wg.Wait()
-	}(wg, tmp)
+	}(wg, tmpOut)
 
-	for hash := range tmp {
+
+	for hash := range tmpOut {
 		out <- hash
 	}
 }
 
+
 func MultiHash(in chan interface{}, out chan interface{}) {
+
 	type hashNode struct {
 		id    int
 		value string
 	}
 
 	wgOut := &sync.WaitGroup{}
+
 	outCh := make(chan string)
 
+	wgInCount := 6
+
 	for input := range in {
+		wgOut.Add(1)
+
 		wgIn := &sync.WaitGroup{}
-		data, ok := input.(string)
-		if !ok {
-			log.Fatalf("can't convert %T to string", input)
-		}
+		data, _ := input.(string)
+
 		inCh := make(chan hashNode)
 
-		wgOut.Add(1)
-		wgIn.Add(6)
-		for i := 0; i < 6; i++ {
+		wgIn.Add(wgInCount)
+
+		for i := 0; i < wgInCount; i++ {
 			go func(wg *sync.WaitGroup, i int, inp string, out chan hashNode) {
 				defer wg.Done()
 				out <- hashNode{i, DataSignerCrc32(fmt.Sprintf("%v%v", i, inp))}
