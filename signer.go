@@ -1,36 +1,59 @@
 package main
 
 import (
-	"fmt"
-	"sort"
-	"strconv"
-	"strings"
 	"sync"
+	"fmt"
 )
+
+type SingleHashResult struct {
+	Hash string
+	Number string
+}
 
 func ExecutePipeline(hashSignJobs ...job) {
 	wg := &sync.WaitGroup{}
-	defer wg.Wait()
 
 	in := make(chan interface{})
+	out := make(chan interface{})
 
+	wg.Add(len(hashSignJobs))
 	for _, jobItem := range hashSignJobs {
-
-		wg.Add(1)
-
-		out := make(chan interface{})
-
-		go func(job job, in chan interface{}, out chan interface{}, wg *sync.WaitGroup) {
-			job(in, out)
+		go func(jobFunc job, in chan interface{}, out chan interface{}, wg *sync.WaitGroup) {
+			jobFunc(in, out)
 			defer wg.Done()
-			defer close(out)
 		}(jobItem, in, out, wg)
-
-		in = out
 	}
 
+	defer wg.Wait()
 }
 
+func SingleHash(in chan interface{}, out chan interface{}) {
+	for data := range out {
+		number := fmt.Sprintf("%v", data)
+		result := DataSignerCrc32(number)+ "~" + DataSignerCrc32(DataSignerMd5(number))
+		in <- SingleHashResult{Hash: result, Number: number}
+	}
+}
+
+func MultiHash(in chan interface{}, out chan interface{})  {
+	for th := range in {
+		hashResult := (th).(SingleHashResult)
+		fmt.Printf("number %v, hash %v ", hashResult.Number, hashResult.Hash)
+		fmt.Printf("MultiHash %v \n", DataSignerCrc32(hashResult.Hash + hashResult.Number))
+
+		//out <- DataSignerCrc32(hashResult.Hash + hashResult.Number)
+	}
+}
+
+func CombineResults(in, out chan interface{}){
+
+	//for multiHashResut := range out {
+	//	fmt.Println("out", multiHashResut)
+	//}
+}
+
+
+/*
 func SingleHash(in chan interface{}, out chan interface{}) {
 
 	wg := &sync.WaitGroup{}
@@ -76,7 +99,6 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 		out <- hash
 	}
 }
-
 
 func MultiHash(in chan interface{}, out chan interface{}) {
 
@@ -153,3 +175,5 @@ func CombineResults(in, out chan interface{}) {
 	sort.Strings(result)
 	out <- strings.Join(result, "_")
 }
+
+*/
