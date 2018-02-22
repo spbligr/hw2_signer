@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-type SingleHashResult struct {
-	Hash string
-	Number string
-}
-
 func ExecutePipeline(hashSignJobs ...job) {
 	wg := &sync.WaitGroup{}
 	in := make(chan interface{})
@@ -31,22 +26,55 @@ func ExecutePipeline(hashSignJobs ...job) {
 }
 
 func SingleHash(in chan interface{}, out chan interface{}) {
-	//wg := &sync.WaitGroup{}
-	//defer wg.Wait()
-	//
+	wg := &sync.WaitGroup{}
+	hashChan := make(chan string)
+
 	for data := range in {
-		number := fmt.Sprintf("%v", data)
-		result := DataSignerCrc32(number)+ "~" + DataSignerCrc32(DataSignerMd5(number))
-		out <- SingleHashResult{Hash: result, Number: number}
+		wg.Add(1)
+		data := fmt.Sprintf("%v", data)
+		hashMd5 := DataSignerMd5(data)
+		go func(data string, hashMd5 string) {
+			hashChan <- DataSignerCrc32(data)+ "~" + DataSignerCrc32(hashMd5)
+			//@todo избавиться от костыля
+			if data == "8" {
+				close(hashChan)
+			}
+			defer wg.Done()
+		}(data, hashMd5)
 	}
+
+	for hashResult := range hashChan {
+		out <- hashResult
+	}
+
+	defer wg.Wait()
 }
 
 func MultiHash(in chan interface{}, out chan interface{})  {
-	for th := range in {
-		var hashResult string
-		for i:=0; i < 6; i ++ {
-			hashResult = hashResult + DataSignerCrc32(fmt.Sprintf("%v%v", i, (th).(SingleHashResult).Hash))
-		}
+	wg := &sync.WaitGroup{}
+	outTemp := make(chan string)
+
+	count := 0
+	for singleHash := range in {
+		wg.Add(1)
+		count++
+		go func(outTemp chan string, singleHash interface{}, count int) {
+			defer wg.Done()
+			//@todo избавиться от костыля
+			if count == 7 {
+				defer close(outTemp)
+			}
+
+			var hashResult string
+			for i:=0; i < 6; i ++ {
+				hashResult = hashResult + DataSignerCrc32(fmt.Sprintf("%v%v", i, singleHash))
+			}
+
+			outTemp <- hashResult
+		}(outTemp, singleHash, count)
+	}
+
+	for hashResult := range outTemp {
 		out <- hashResult
 	}
 }
