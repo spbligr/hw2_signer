@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+type multiHashResult struct {
+	number int
+	hash string
+}
+
+const TH_COUNT  = 6
+
 func ExecutePipeline(hashSignJobs ...job) {
 	wg := &sync.WaitGroup{}
 	in := make(chan interface{})
@@ -53,6 +60,67 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 	defer wg.Wait()
 }
 
+func MultiHash(in chan interface{}, out chan interface{})  {
+
+	wg := &sync.WaitGroup{}
+
+	outTemp := make(chan string)
+
+	for input := range in {
+		wg.Add(1)
+
+		wgTemp := &sync.WaitGroup{}
+		data := input.(string)
+		inCh := make(chan multiHashResult)
+
+		wgTemp.Add(TH_COUNT)
+		for i := 0; i < TH_COUNT; i++ {
+			go GetMultiHashProcess(inCh, wgTemp, data, i)
+		}
+		go func(wgInner *sync.WaitGroup, c chan multiHashResult) {
+			defer close(c)
+			wgInner.Wait()
+		}(wgTemp, inCh)
+
+		go sortMultiResults(inCh, outTemp, wg)
+
+	}
+
+	go func(wgOut *sync.WaitGroup, c chan string) {
+		defer close(c)
+		wgOut.Wait()
+	}(wg, outTemp)
+
+	for hash := range outTemp {
+		out <- hash
+	}
+
+}
+
+func GetMultiHashProcess(hashResultChan chan multiHashResult, wg *sync.WaitGroup, singleHash interface{}, i int)  {
+	defer wg.Done()
+	hashResultChan <- multiHashResult{number: i, hash: DataSignerCrc32(fmt.Sprintf("%v%v", i, singleHash))}
+}
+
+func sortMultiResults(hashResults chan multiHashResult, out chan string, wg *sync.WaitGroup)  {
+	defer wg.Done()
+	result := map[int]string{}
+	var data []int
+
+	for hashResult := range hashResults {
+		result[hashResult.number] = hashResult.hash
+		data = append(data, hashResult.number)
+	}
+	sort.Ints(data)
+
+	var results []string
+	for i := range data {
+		results = append(results, result[i])
+	}
+
+	out <- strings.Join(results, "")
+}
+
 func getCrt32Data(data string) chan string  {
 	result := make(chan string, 1)
 	go func(out chan <- string) {
@@ -60,36 +128,6 @@ func getCrt32Data(data string) chan string  {
 	}(result)
 
 	return result
-}
-
-
-func MultiHash(in chan interface{}, out chan interface{})  {
-	wg := &sync.WaitGroup{}
-	outTemp := make(chan string)
-
-	count := 0
-	for singleHash := range in {
-		wg.Add(1)
-		count++
-		go func(outTemp chan string, singleHash interface{}, count int) {
-			defer wg.Done()
-			//@todo надеюсь за этот костыль я не попаду в ад
-			if count == 7 {
-				defer close(outTemp)
-			}
-
-			var hashResult string
-			for i:=0; i < 6; i ++ {
-				hashResult = hashResult + DataSignerCrc32(fmt.Sprintf("%v%v", i, singleHash))
-			}
-
-			outTemp <- hashResult
-		}(outTemp, singleHash, count)
-	}
-
-	for hashResult := range outTemp {
-		out <- hashResult
-	}
 }
 
 func CombineResults(in, out chan interface{}){
