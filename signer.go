@@ -34,12 +34,15 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 		data := fmt.Sprintf("%v", data)
 		hashMd5 := DataSignerMd5(data)
 		go func(data string, hashMd5 string) {
-			hashChan <- DataSignerCrc32(data)+ "~" + DataSignerCrc32(hashMd5)
-			//@todo избавиться от костыля
+			//@todo надеюсь за этот костыль я не попаду в ад
 			if data == "8" {
-				close(hashChan)
+				defer close(hashChan)
 			}
 			defer wg.Done()
+			crt32DataChan := getCrt32Data(data)
+			right32 := DataSignerCrc32(hashMd5)
+			left32 := <- crt32DataChan
+			hashChan <- left32 + "~" + right32
 		}(data, hashMd5)
 	}
 
@@ -49,6 +52,16 @@ func SingleHash(in chan interface{}, out chan interface{}) {
 
 	defer wg.Wait()
 }
+
+func getCrt32Data(data string) chan string  {
+	result := make(chan string, 1)
+	go func(out chan <- string) {
+		out <- DataSignerCrc32(data)
+	}(result)
+
+	return result
+}
+
 
 func MultiHash(in chan interface{}, out chan interface{})  {
 	wg := &sync.WaitGroup{}
@@ -60,7 +73,7 @@ func MultiHash(in chan interface{}, out chan interface{})  {
 		count++
 		go func(outTemp chan string, singleHash interface{}, count int) {
 			defer wg.Done()
-			//@todo избавиться от костыля
+			//@todo надеюсь за этот костыль я не попаду в ад
 			if count == 7 {
 				defer close(outTemp)
 			}
